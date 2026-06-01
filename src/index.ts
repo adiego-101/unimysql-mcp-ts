@@ -9,8 +9,16 @@ import {
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 import { z } from "zod";
+import fs from "node:fs";
+import path from "node:path";
 
 dotenv.config();
+
+// Define the export directory
+const EXPORTS_DIR = path.resolve(process.cwd(), "exports");
+if (!fs.existsSync(EXPORTS_DIR)) {
+  fs.mkdirSync(EXPORTS_DIR, { recursive: true });
+}
 
 /**
  * UniMySQL-MCP: The global AI Tutor for SQL students.
@@ -35,7 +43,7 @@ class UniMySQLServer {
 
     this.setupTools();
     
-    // Error handling - Keep it clean and quiet on stdout
+    // Error handling
     this.server.onerror = (error) => console.error("[MCP Error]", error);
     process.on("SIGINT", async () => {
       await this.close();
@@ -105,6 +113,19 @@ class UniMySQLServer {
             required: ["sql"],
           },
         },
+        {
+          name: "export_data",
+          description: "Export large query results to a local file (CSV/JSON). Prevents chat overflow.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              sql: { type: "string", description: "The SELECT query to export." },
+              filename: { type: "string", description: "Desired filename (e.g., 'students_report')." },
+              format: { type: "string", enum: ["csv", "json"], default: "csv" }
+            },
+            required: ["sql", "filename"]
+          },
+        },
       ],
     }));
 
@@ -115,6 +136,39 @@ class UniMySQLServer {
         const pool = await this.getPool();
 
         switch (name) {
+          case "export_data": {
+            const { sql, filename, format = "csv" } = args as { sql: string; filename: string; format: "csv" | "json" };
+            
+            if (!sql.trim().toUpperCase().startsWith("SELECT")) {
+                return { content: [{ type: "text", text: "Error: Only SELECT queries can be exported." }], isError: true };
+            }
+
+            const safeFilename = filename.replace(/[^a-z0-9_-]/gi, '_') + "." + format;
+            const targetPath = path.join(EXPORTS_DIR, safeFilename);
+
+            const [rows]: any = await pool.query(sql);
+            
+            let content = "";
+            if (format === "csv") {
+                if (rows.length > 0) {
+                    const headers = Object.keys(rows[0]).join(",");
+                    const data = rows.map((r: any) => Object.values(r).map(v => `"${v}"`).join(",")).join("\n");
+                    content = `${headers}\n${data}`;
+                }
+            } else {
+                content = JSON.stringify(rows, null, 2);
+            }
+
+            fs.writeFileSync(targetPath, content);
+            
+            return {
+              content: [{ 
+                type: "text", 
+                text: `✅ Export Successful!\n- File: ${safeFilename}\n- Path: ${targetPath}\n- Rows: ${rows.length}\n- Format: ${format.toUpperCase()}` 
+              }]
+            };
+          }
+
           case "list_tables": {
             const [rows]: any = await pool.query("SHOW TABLES");
             return {
@@ -177,7 +231,6 @@ class UniMySQLServer {
               };
             }
 
-            // Apply a safety LIMIT 50 to SELECT queries if not present
             if (sql.trim().toUpperCase().startsWith("SELECT") && !sql.toUpperCase().includes("LIMIT")) {
               sql = sql.replace(/;?$/, " LIMIT 50;");
               process.stderr.write("INFO: Applied safety LIMIT 50.\n");
