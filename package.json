@@ -1,0 +1,32 @@
+{
+  "name": "mysql-mcp-guard",
+  "version": "0.1.2",
+  "description": "Professional MySQL MCP server with integrated security guardrails and performance auditing.",
+  "main": "dist/index.js",
+  "bin": {
+    "mysql-mcp-guard": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node-esm src/index.ts"
+  },
+  "keywords": [],
+  "author": "adiego-101",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "dotenv": "^17.4.2",
+    "mysql2": "^3.22.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}
